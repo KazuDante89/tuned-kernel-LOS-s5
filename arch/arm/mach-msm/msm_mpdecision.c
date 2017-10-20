@@ -40,8 +40,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/mpdcvs_trace.h>
 
-#define DEFAULT_RQ_AVG_POLL_MS    (1)
-#define DEFAULT_RQ_AVG_DIVIDE    (25)
+#define DEFAULT_RQ_AVG_POLL_MS    (10)
+#define DEFAULT_RQ_AVG_DIVIDE    (4)
 
 struct mpd_attrib {
 	struct kobj_attribute	enabled;

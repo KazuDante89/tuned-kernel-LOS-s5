@@ -113,8 +113,8 @@
 # Apply Boeffla-Kernel default settings 2
 
 	# Sdcard buffer tweaks default to 1024 kb
-	echo 1024 > /sys/block/mmcblk0/bdi/read_ahead_kb
-	echo 1024 > /sys/block/mmcblk1/bdi/read_ahead_kb
+	echo 512 > /sys/block/mmcblk0/bdi/read_ahead_kb
+	echo 512 > /sys/block/mmcblk1/bdi/read_ahead_kb
 
 	echo $(date) Boeffla-Kernel default settings 2 applied >> $BOEFFLA_LOGFILE
 
@@ -153,7 +153,7 @@
 
 # Turn off debugging for certain modules
 	echo 0 > /sys/module/kernel/parameters/initcall_debug
-	echo 0 > /sys/module/lowmemorykiller/parameters/debug_level
+	echo 3 > /sys/module/lowmemorykiller/parameters/debug_level
 	echo 0 > /sys/module/alarm/parameters/debug_mask
 	echo 0 > /sys/module/alarm_dev/parameters/debug_mask
 	echo 0 > /sys/module/binder/parameters/debug_mask

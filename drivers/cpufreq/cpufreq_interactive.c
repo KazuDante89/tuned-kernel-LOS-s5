@@ -35,8 +35,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/cpufreq_interactive.h>
 
-#define CONFIG_MODE_AUTO_CHANGE
-#define CONFIG_RETENTION_CHANGE
+//#define CONFIG_MODE_AUTO_CHANGE
+//#define CONFIG_RETENTION_CHANGE
 
 static int active_count;
 

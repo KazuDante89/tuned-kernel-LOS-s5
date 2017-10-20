@@ -10,9 +10,12 @@
 # Parameters to be configured manually
 #######################################
 
-BOEFFLA_VERSION="1.0-test-CM14.1-g900f"
+BOEFFLA_VERSION="4.1-beta14-CM14.1-g900f"
 
 TOOLCHAIN="/opt/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+TOOLCHAIN="/root/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+#TOOLCHAIN="/root/arm-eabi-6.x/bin/arm-eabi-"
+
 ARCHITECTURE=arm
 COMPILER_FLAGS_KERNEL="-Wno-maybe-uninitialized -Wno-array-bounds"
 COMPILER_FLAGS_MODULE="-Wno-maybe-uninitialized -Wno-array-bounds"
@@ -150,7 +153,7 @@ step3_compile()
 	if [ -z "$OUTPUT_FOLDER" ]; then
 		make -j$NUM_CPUS CFLAGS_KERNEL="$COMPILER_FLAGS_KERNEL" CFLAGS_MODULE="$COMPILER_FLAGS_MODULE" 2>&1 |tee ../compile.log
 	else
-		make -j$NUM_CPUS O=$OUTPUT_FOLDER CFLAGS_KERNEL="$COMPILER_FLAGS_KERNEL" CFLAGS_MODULE="$COMPILER_FLAGS_MODULE" 2>&1 |tee ../compile.log
+		make -j$NUM_CPUS O=$OUTPUT_FOLDER CFLAGS_KERNEL="$COMPILER_FLAGS_KERNEL" CFLAGS_MODULE="$COMPILER_FLAGS_MODULE" CONFIG_DEBUG_SECTION_MISMATCH=y 2>&1 |tee ../compile.log
 	fi
 
 	# compile dtb if required
