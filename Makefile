@@ -580,7 +580,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
 else
-KBUILD_CFLAGS	+= -O2 $(OPTS) $(GCC6WARNINGS) -Wno-logical-not-parentheses
+KBUILD_CFLAGS	+= -O2 $(OPTS) $(GCC6WARNINGS)
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile

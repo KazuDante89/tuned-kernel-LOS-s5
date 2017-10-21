@@ -245,7 +245,7 @@ static struct request *bfq_choose_req(struct bfq_data *bfqd,
 	else if ((rq2->cmd_flags & REQ_META) && !(rq1->cmd_flags & REQ_META))
 		return rq2;
 
-	return q1;
+	return rq1;
 #if 0
 	s1 = blk_rq_pos(rq1);
 	s2 = blk_rq_pos(rq2);
@@ -4115,8 +4115,8 @@ static ssize_t bfq_low_latency_store(struct elevator_queue *e,
 static struct elv_fs_entry bfq_attrs[] = {
 	BFQ_ATTR(fifo_expire_sync),
 	BFQ_ATTR(fifo_expire_async),
-	BFQ_ATTR(back_seek_max),
-	BFQ_ATTR(back_seek_penalty),
+//	BFQ_ATTR(back_seek_max),
+//	BFQ_ATTR(back_seek_penalty),
 	BFQ_ATTR(slice_idle),
 	BFQ_ATTR(max_budget),
 	BFQ_ATTR(max_budget_async_rq),
