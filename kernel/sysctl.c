@@ -121,6 +121,8 @@ extern int blk_iopoll_enabled;
 #ifdef CONFIG_LOCKUP_DETECTOR
 static int sixty = 60;
 static int neg_one = -1;
+#else
+static int sixty = 60;
 #endif
 
 static int zero;
@@ -1150,7 +1152,7 @@ static struct ctl_table vm_table[] = {
 #ifdef CONFIG_INCREASE_MAXIMUM_SWAPPINESS
 		.extra2		= &max_swappiness,
 #else
-		.extra2		= &one_hundred,
+		.extra2		= &sixty,
 #endif
 	},
 #ifdef CONFIG_HUGETLB_PAGE

@@ -362,7 +362,7 @@ OPTS           = -fno-conserve-stack -fmodulo-sched -fmodulo-sched-allow-regmove
                  -fgcse-after-reload -fgcse-lm -fsched-spec-load -ffast-math -fsingle-precision-constant \
                  -fpredictive-commoning
 # -fgcse-sm
-GCC6WARNINGS   = -Wno-bool-compare -Wno-misleading-indentation -Wno-format -Wno-strict-aliasing -Wno-tautological-compare -Wno-discarded-array-qualifiers -Wno-unused-const-variable
+GCC6WARNINGS   = -Wno-bool-compare -Wno-misleading-indentation -Wno-format -Wno-strict-aliasing -Wno-tautological-compare -Wno-discarded-array-qualifiers
 GCC7WARNINGS   = $(GCC6WARNINGS) -Wno-int-in-bool-context -Wno-memset-elt-size -Wno-parentheses -Wno-bool-operation -Wno-duplicate-decl-specifier -Wno-stringop-overflow -Wno-format-overflow -Wno-switch-unreachable -Wno-pointer-compare
 GCC8WARNINGS   = $(GCC7WARNINGS) -Wno-multistatement-macros -Wno-error=sizeof-pointer-div -Wno-sizeof-pointer-div
 
@@ -580,7 +580,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
 else
-KBUILD_CFLAGS	+= -O2 $(OPTS) $(GCC7WARNINGS) -Wno-logical-not-parentheses
+KBUILD_CFLAGS	+= -O2 $(OPTS) $(GCC6WARNINGS) -Wno-logical-not-parentheses
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile

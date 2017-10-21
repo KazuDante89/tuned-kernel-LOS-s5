@@ -73,13 +73,11 @@
 /* Expiration time of sync (0) and async (1) requests, in jiffies. */
 static const int bfq_fifo_expire[2] = { HZ / 4, HZ / 8 };
 
-#if 0
 /* Maximum backwards seek, in KiB. */
-static const int bfq_back_max = 16 * 1024;
+//static const int bfq_back_max = 16 * 1024;
 
 /* Penalty of a backwards seek, in number of sectors. */
-static const int bfq_back_penalty = 2;
-#endif
+//static const int bfq_back_penalty = 2;
 
 /* Idling period duration, in jiffies. */
 static int bfq_slice_idle = HZ / 125;
@@ -221,7 +219,7 @@ static inline void bfq_schedule_dispatch(struct bfq_data *bfqd)
  * We choose the request that is closesr to the head right now.  Distance
  * behind the head is penalized and only allowed to a certain extent.
  */
-static inline struct request *bfq_choose_req(struct bfq_data *bfqd,
+static struct request *bfq_choose_req(struct bfq_data *bfqd,
 				      struct request *rq1,
 				      struct request *rq2,
 				      sector_t last)
@@ -247,7 +245,7 @@ static inline struct request *bfq_choose_req(struct bfq_data *bfqd,
 	else if ((rq2->cmd_flags & REQ_META) && !(rq1->cmd_flags & REQ_META))
 		return rq2;
 
-	return rq1;
+	return q1;
 #if 0
 	s1 = blk_rq_pos(rq1);
 	s2 = blk_rq_pos(rq2);
@@ -315,7 +313,7 @@ static inline struct request *bfq_choose_req(struct bfq_data *bfqd,
 #endif
 }
 
-static inline struct bfq_queue *
+static struct bfq_queue *
 bfq_rq_pos_tree_lookup(struct bfq_data *bfqd, struct rb_root *root,
 		     sector_t sector, struct rb_node **ret_parent,
 		     struct rb_node ***rb_link)
@@ -356,7 +354,7 @@ bfq_rq_pos_tree_lookup(struct bfq_data *bfqd, struct rb_root *root,
 	return bfqq;
 }
 
-static inline void bfq_rq_pos_tree_add(struct bfq_data *bfqd, struct bfq_queue *bfqq)
+static void bfq_rq_pos_tree_add(struct bfq_data *bfqd, struct bfq_queue *bfqq)
 {
 	struct rb_node **p, *parent;
 	struct bfq_queue *__bfqq;
@@ -415,7 +413,7 @@ static inline bool bfq_differentiated_weights(struct bfq_data *bfqd)
  * In most scenarios, the rate at which nodes are created/destroyed
  * should be low too.
  */
-static inline void bfq_weights_tree_add(struct bfq_data *bfqd,
+static void bfq_weights_tree_add(struct bfq_data *bfqd,
 				 struct bfq_entity *entity,
 				 struct rb_root *root)
 {
@@ -469,7 +467,7 @@ inc_counter:
  * See the comments to the function bfq_weights_tree_add() for considerations
  * about overhead.
  */
-static inline void bfq_weights_tree_remove(struct bfq_data *bfqd,
+static void bfq_weights_tree_remove(struct bfq_data *bfqd,
 				    struct bfq_entity *entity,
 				    struct rb_root *root)
 {
@@ -491,7 +489,7 @@ reset_entity_pointer:
 	entity->weight_counter = NULL;
 }
 
-static inline struct request *bfq_find_next_rq(struct bfq_data *bfqd,
+static struct request *bfq_find_next_rq(struct bfq_data *bfqd,
 					struct bfq_queue *bfqq,
 					struct request *last)
 {
@@ -535,7 +533,7 @@ static inline unsigned long bfq_serv_to_charge(struct request *rq,
  * budget for its first request, it has to go through two dispatch
  * rounds to actually get it dispatched.
  */
-static inline void bfq_updated_next_req(struct bfq_data *bfqd,
+static void bfq_updated_next_req(struct bfq_data *bfqd,
 				 struct bfq_queue *bfqq)
 {
 	struct bfq_entity *entity = &bfqq->entity;
@@ -645,7 +643,7 @@ static inline void bfq_reset_burst_list(struct bfq_data *bfqd,
 }
 
 /* Add bfqq to the list of queues in current burst (see bfq_handle_burst) */
-static inline void bfq_add_to_burst(struct bfq_data *bfqd, struct bfq_queue *bfqq)
+static void bfq_add_to_burst(struct bfq_data *bfqd, struct bfq_queue *bfqq)
 {
 	/* Increment burst size to take into account also bfqq */
 	bfqd->burst_size++;
@@ -845,7 +843,7 @@ static void bfq_handle_burst(struct bfq_data *bfqd, struct bfq_queue *bfqq,
 	bfq_add_to_burst(bfqd, bfqq);
 }
 
-static inline void bfq_add_request(struct request *rq)
+static void bfq_add_request(struct request *rq)
 {
 	struct bfq_queue *bfqq = RQ_BFQQ(rq);
 	struct bfq_entity *entity = &bfqq->entity;
@@ -1047,7 +1045,7 @@ add_bfqq_busy:
 		bfqq->last_wr_start_finish = jiffies;
 }
 
-static inline struct request *bfq_find_rq_fmerge(struct bfq_data *bfqd,
+static struct request *bfq_find_rq_fmerge(struct bfq_data *bfqd,
 					  struct bio *bio)
 {
 	struct task_struct *tsk = current;
@@ -1068,7 +1066,7 @@ static inline struct request *bfq_find_rq_fmerge(struct bfq_data *bfqd,
 	return NULL;
 }
 
-static inline void bfq_activate_request(struct request_queue *q, struct request *rq)
+static void bfq_activate_request(struct request_queue *q, struct request *rq)
 {
 	struct bfq_data *bfqd = q->elevator->elevator_data;
 
@@ -1087,7 +1085,7 @@ static inline void bfq_deactivate_request(struct request_queue *q,
 	bfqd->rq_in_driver--;
 }
 
-static inline void bfq_remove_request(struct request *rq)
+static void bfq_remove_request(struct request *rq)
 {
 	struct bfq_queue *bfqq = RQ_BFQQ(rq);
 	struct bfq_data *bfqd = bfqq->bfqd;
@@ -1263,7 +1261,7 @@ static inline int bfq_rq_close_to_sector(void *io_struct, bool request,
 	       BFQQ_SEEK_THR;
 }
 
-static inline struct bfq_queue *bfqq_close(struct bfq_data *bfqd, sector_t sector)
+static struct bfq_queue *bfqq_close(struct bfq_data *bfqd, sector_t sector)
 {
 	struct rb_root *root = &bfqd->rq_pos_tree;
 	struct rb_node *parent, *node;
@@ -1309,7 +1307,7 @@ static inline struct bfq_queue *bfqq_close(struct bfq_data *bfqd, sector_t secto
  *            is closely cooperating with itself
  * sector - used as a reference point to search for a close queue
  */
-static inline struct bfq_queue *bfq_close_cooperator(struct bfq_data *bfqd,
+static struct bfq_queue *bfq_close_cooperator(struct bfq_data *bfqd,
 					      struct bfq_queue *cur_bfqq,
 					      sector_t sector)
 {
@@ -1766,7 +1764,7 @@ static void bfq_set_budget_timeout(struct bfq_data *bfqd)
 /*
  * Move request from internal lists to the request queue dispatch list.
  */
-static inline void bfq_dispatch_insert(struct request_queue *q, struct request *rq)
+static void bfq_dispatch_insert(struct request_queue *q, struct request *rq)
 {
 	struct bfq_data *bfqd = q->elevator->elevator_data;
 	struct bfq_queue *bfqq = RQ_BFQQ(rq);
@@ -2658,7 +2656,7 @@ static void bfq_update_wr_data(struct bfq_data *bfqd, struct bfq_queue *bfqq)
  * Dispatch one request from bfqq, moving it to the request queue
  * dispatch list.
  */
-static inline int bfq_dispatch_request(struct bfq_data *bfqd,
+static int bfq_dispatch_request(struct bfq_data *bfqd,
 				struct bfq_queue *bfqq)
 {
 	int dispatched = 0;
@@ -4117,8 +4115,8 @@ static ssize_t bfq_low_latency_store(struct elevator_queue *e,
 static struct elv_fs_entry bfq_attrs[] = {
 	BFQ_ATTR(fifo_expire_sync),
 	BFQ_ATTR(fifo_expire_async),
-//	BFQ_ATTR(back_seek_max),
-//	BFQ_ATTR(back_seek_penalty),
+	BFQ_ATTR(back_seek_max),
+	BFQ_ATTR(back_seek_penalty),
 	BFQ_ATTR(slice_idle),
 	BFQ_ATTR(max_budget),
 	BFQ_ATTR(max_budget_async_rq),
