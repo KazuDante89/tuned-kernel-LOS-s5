@@ -1111,7 +1111,7 @@ if [ "apply_system_tweaks" == "$1" ]; then
 		echo "100" > /proc/sys/vm/dirty_writeback_centisecs
 		echo "8192" > /proc/sys/vm/min_free_kbytes
 		echo "150" > /proc/sys/vm/swappiness
-		echo "500" > /proc/sys/vm/vfs_cache_pressure
+		echo "80" > /proc/sys/vm/vfs_cache_pressure
 		echo "0" > /proc/sys/vm/drop_caches
 		busybox sleep 0.5s
 		busybox sync
