@@ -85,7 +85,7 @@ static struct dbs_tuners {
 	.freq_step = 5,
 };
 
-static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
+static cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 							cputime64_t *wall)
 {
 	cputime64_t idle_time;
@@ -108,7 +108,7 @@ static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 	return (cputime64_t)jiffies_to_usecs(idle_time);
 }
 
-static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
+static cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
 {
 	u64 idle_time = get_cpu_idle_time_us(cpu, wall);
 
@@ -143,14 +143,6 @@ dbs_cpufreq_notifier(struct notifier_block *nb, unsigned long val,
 static struct notifier_block dbs_cpufreq_notifier_block = {
 	.notifier_call = dbs_cpufreq_notifier
 };
-
-static ssize_t show_sampling_rate_min(struct kobject *kobj,
-				      struct attribute *attr, char *buf)
-{
-	return sprintf(buf, "%u\n", min_sampling_rate);
-}
-
-define_one_global_ro(sampling_rate_min);
 
 #define show_one(file_name, object)					\
 static ssize_t show_##file_name						\
@@ -265,7 +257,6 @@ define_one_global_rw(ignore_nice_load);
 define_one_global_rw(freq_step);
 
 static struct attribute *dbs_attributes[] = {
-	&sampling_rate_min.attr,
 	&sampling_rate.attr,
 	&up_threshold.attr,
 	&down_threshold.attr,
@@ -279,7 +270,7 @@ static struct attribute_group dbs_attr_group = {
 	.name = "lionheart",
 };
 
-static inline void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
+static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
 	unsigned int load = 0;
 	unsigned int max_load = 0;
@@ -327,7 +318,7 @@ static inline void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 			max_load = load;
 	}
 
-	if (dbs_tuners_ins.freq_step == 0)
+	if (unlikely(dbs_tuners_ins.freq_step == 0))
 		return;
 
 	if (max_load > dbs_tuners_ins.up_threshold) {
@@ -366,7 +357,7 @@ static inline void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	}
 }
 
-static inline void do_dbs_timer(struct work_struct *work)
+static void do_dbs_timer(struct work_struct *work)
 {
 	struct cpu_dbs_info_s *dbs_info =
 		container_of(work, struct cpu_dbs_info_s, work.work);

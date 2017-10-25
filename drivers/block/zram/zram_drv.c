@@ -54,9 +54,9 @@ static ssize_t zram_attr_##name##_show(struct device *d,		\
 static struct device_attribute dev_attr_##name =			\
 	__ATTR(name, S_IRUGO, zram_attr_##name##_show, NULL);
 
-static inline int init_done(struct zram *zram)
+static inline bool init_done(struct zram *zram)
 {
-	return zram->meta != NULL;
+	return zram->disksize;
 }
 
 static inline struct zram *dev_to_zram(struct device *dev)
@@ -99,7 +99,7 @@ static ssize_t mem_used_total_show(struct device *dev,
 {
 	u64 val = 0;
 	struct zram *zram = dev_to_zram(dev);
-	struct zram_meta *meta = zram->meta;
+	struct zram *meta = zram->meta;
 
 	down_read(&zram->init_lock);
 	if (init_done(zram))
@@ -180,22 +180,22 @@ static ssize_t comp_algorithm_store(struct device *dev,
 }
 
 /* flag operations needs meta->tb_lock */
-static int zram_test_flag(struct zram_meta *meta, u32 index,
+static int zram_test_flag(struct zram *meta, u32 index,
 			enum zram_pageflags flag)
 {
-	return meta->table[index].flags & BIT(flag);
+	return meta->table[index].value & BIT(flag);
 }
 
-static void zram_set_flag(struct zram_meta *meta, u32 index,
+static void zram_set_flag(struct zram *meta, u32 index,
 			enum zram_pageflags flag)
 {
-	meta->table[index].flags |= BIT(flag);
+	meta->table[index].value |= BIT(flag);
 }
 
-static void zram_clear_flag(struct zram_meta *meta, u32 index,
+static void zram_clear_flag(struct zram *meta, u32 index,
 			enum zram_pageflags flag)
 {
-	meta->table[index].flags &= ~BIT(flag);
+	meta->table[index].value &= ~BIT(flag);
 }
 
 static inline int is_partial_io(struct bio_vec *bvec)
@@ -206,65 +206,51 @@ static inline int is_partial_io(struct bio_vec *bvec)
 /*
  * Check if request is within bounds and aligned on zram logical blocks.
  */
-static inline int valid_io_request(struct zram *zram, struct bio *bio)
+static inline bool valid_io_request(struct zram *zram,
+		sector_t start, unsigned int size)
 {
-	u64 start, end, bound;
+	u64 end, bound;
 
 	/* unaligned request */
-	if (unlikely(bio->bi_sector &
+	if (unlikely(start &
 		     (ZRAM_SECTOR_PER_LOGICAL_BLOCK - 1)))
-		return 0;
-	if (unlikely(bio->bi_size & (ZRAM_LOGICAL_BLOCK_SIZE - 1)))
-		return 0;
+		return false;
+	if (unlikely(size & (ZRAM_LOGICAL_BLOCK_SIZE - 1)))
+		return false;
 
-	start = bio->bi_sector;
-	end = start + (bio->bi_size >> SECTOR_SHIFT);
+	end = start + (size >> SECTOR_SHIFT);
 	bound = zram->disksize >> SECTOR_SHIFT;
 	/* out of range range */
 	if (unlikely(start >= bound || end > bound || start > end))
-		return 0;
+		return false;
 
 	/* I/O request is valid */
-	return 1;
+	return true;
 }
 
-static void zram_meta_free(struct zram_meta *meta)
+static void zram_meta_free(struct zram *meta)
 {
 	zs_destroy_pool(meta->mem_pool);
 	vfree(meta->table);
 	kfree(meta);
 }
 
-static struct zram_meta *zram_meta_alloc(u64 disksize)
+static bool zram_meta_alloc(struct zram *zram, u64 disksize)
 {
 	size_t num_pages;
-	struct zram_meta *meta = kmalloc(sizeof(*meta), GFP_KERNEL);
-	if (!meta)
-		goto out;
 
 	num_pages = disksize >> PAGE_SHIFT;
-	meta->table = vzalloc(num_pages * sizeof(*meta->table));
-	if (!meta->table) {
-		pr_err("Error allocating zram address table\n");
-		goto free_meta;
+	zram->table = vzalloc(num_pages * sizeof(*zram->table));
+	if (!zram->table)
+		return false;
+
+	zram->mem_pool = zs_create_pool(zram->disk->disk_name);
+	if (!zram->mem_pool) {
+		vfree(zram->table);
+		return false;
 	}
 
-	meta->mem_pool = zs_create_pool(GFP_NOIO | __GFP_HIGHMEM);
-	if (!meta->mem_pool) {
-		pr_err("Error creating memory pool\n");
-		goto free_table;
-	}
-
-	rwlock_init(&meta->tb_lock);
-	return meta;
-
-free_table:
-	vfree(meta->table);
-free_meta:
-	kfree(meta);
-	meta = NULL;
-out:
-	return meta;
+	return true;
 }
 
 static void update_position(u32 *index, int *offset, struct bio_vec *bvec)
@@ -304,249 +290,137 @@ static void handle_zero_page(struct bio_vec *bvec)
 	flush_dcache_page(page);
 }
 
-/* NOTE: caller should hold meta->tb_lock with write-side */
+/*
+ * To protect concurrent access to the same index entry,
+ * caller should hold this table index entry's bit_spinlock to
+ * indicate this index entry is accessing.
+ */
 static void zram_free_page(struct zram *zram, size_t index)
 {
-	struct zram_meta *meta = zram->meta;
-	unsigned long handle = meta->table[index].handle;
+	unsigned long handle = zram_get_handle(zram, index);
 
-	if (unlikely(!handle)) {
-		/*
-		 * No memory is allocated for zero filled pages.
-		 * Simply clear zero page flag.
-		 */
-		if (zram_test_flag(meta, index, ZRAM_ZERO)) {
-			zram_clear_flag(meta, index, ZRAM_ZERO);
-			atomic64_dec(&zram->stats.zero_pages);
-		}
+	/*
+	 * No memory is allocated for same element filled pages.
+	 * Simply clear same page flag.
+	 */
+	if (zram_test_flag(zram, index, ZRAM_SAME)) {
+		zram_clear_flag(zram, index, ZRAM_SAME);
+		zram_set_element(zram, index, 0);
+		atomic64_dec(&zram->stats.same_pages);
+		atomic64_dec(&zram->stats.pages_stored);
 		return;
 	}
 
-	zs_free(meta->mem_pool, handle);
+	if (!handle)
+		return;
 
-	atomic64_sub(meta->table[index].size, &zram->stats.compr_data_size);
+	zs_free(zram->mem_pool, handle);
+
+	atomic64_sub(zram_get_obj_size(zram, index),
+			&zram->stats.compr_data_size);
 	atomic64_dec(&zram->stats.pages_stored);
 
-	meta->table[index].handle = 0;
-	meta->table[index].size = 0;
+	zram_set_handle(zram, index, 0);
+	zram_set_obj_size(zram, index, 0);
 }
 
-static int zram_decompress_page(struct zram *zram, char *mem, u32 index)
-{
-	int ret = 0;
-	unsigned char *cmem;
-	struct zram_meta *meta = zram->meta;
-	unsigned long handle;
-	u16 size;
-
-	read_lock(&meta->tb_lock);
-	handle = meta->table[index].handle;
-	size = meta->table[index].size;
-
-	if (!handle || zram_test_flag(meta, index, ZRAM_ZERO)) {
-		read_unlock(&meta->tb_lock);
-		clear_page(mem);
-		return 0;
-	}
-
-	cmem = zs_map_object(meta->mem_pool, handle, ZS_MM_RO);
-	if (size == PAGE_SIZE)
-		copy_page(mem, cmem);
-	else
-		ret = zcomp_decompress(zram->comp, cmem, size, mem);
-	zs_unmap_object(meta->mem_pool, handle);
-	read_unlock(&meta->tb_lock);
-
-	/* Should NEVER happen. Return bio error if it does. */
-	if (unlikely(ret)) {
-		pr_err("Decompression failed! err=%d, page=%u\n", ret, index);
-		atomic64_inc(&zram->stats.failed_reads);
-		return ret;
-	}
-
-	return 0;
-}
-
-static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
-			  u32 index, int offset, struct bio *bio)
+static int zram_decompress_page(struct zram *zram, struct page *page, u32 index)
 {
 	int ret;
-	struct page *page;
-	unsigned char *user_mem, *uncmem = NULL;
-	struct zram_meta *meta = zram->meta;
-	page = bvec->bv_page;
+	unsigned long handle;
+	unsigned int size;
+	void *src, *dst;
 
-	read_lock(&meta->tb_lock);
-	if (unlikely(!meta->table[index].handle) ||
-			zram_test_flag(meta, index, ZRAM_ZERO)) {
-		read_unlock(&meta->tb_lock);
-		handle_zero_page(bvec);
+	if (zram_same_page_read(zram, index, page, 0, PAGE_SIZE))
 		return 0;
+
+	zram_slot_lock(zram, index);
+	handle = zram_get_handle(zram, index);
+	size = zram_get_obj_size(zram, index);
+
+	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
+	if (size == PAGE_SIZE) {
+		dst = kmap_atomic(page);
+		memcpy(dst, src, PAGE_SIZE);
+		kunmap_atomic(dst);
+		ret = 0;
+	} else {
+		struct zcomp_strm *zstrm = zcomp_stream_get(zram->comp);
+
+		dst = kmap_atomic(page);
+		ret = zcomp_decompress(zstrm, src, size, dst);
+		kunmap_atomic(dst);
+		zcomp_stream_put(zram->comp);
 	}
-	read_unlock(&meta->tb_lock);
+	zs_unmap_object(zram->mem_pool, handle);
+	zram_slot_unlock(zram, index);
 
-	if (is_partial_io(bvec))
-		/* Use  a temporary buffer to decompress the page */
-		uncmem = kmalloc(PAGE_SIZE, GFP_NOIO);
-
-	user_mem = kmap_atomic(page);
-	if (!is_partial_io(bvec))
-		uncmem = user_mem;
-
-	if (!uncmem) {
-		pr_info("Unable to allocate temp memory\n");
-		ret = -ENOMEM;
-		goto out_cleanup;
-	}
-
-	ret = zram_decompress_page(zram, uncmem, index);
 	/* Should NEVER happen. Return bio error if it does. */
 	if (unlikely(ret))
-		goto out_cleanup;
+		pr_err("Decompression failed! err=%d, page=%u\n", ret, index);
 
-	if (is_partial_io(bvec))
-		memcpy(user_mem + bvec->bv_offset, uncmem + offset,
-				bvec->bv_len);
-
-	flush_dcache_page(page);
-	ret = 0;
-out_cleanup:
-	kunmap_atomic(user_mem);
-	if (is_partial_io(bvec))
-		kfree(uncmem);
 	return ret;
 }
 
-static int zram_bvec_write(struct zram *zram, struct bio_vec *bvec, u32 index,
-			   int offset)
+static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
+				u32 index, int offset)
 {
-	int ret = 0;
-	size_t clen;
-	unsigned long handle;
+	int ret;
 	struct page *page;
-	unsigned char *user_mem, *cmem, *src, *uncmem = NULL;
-	struct zram_meta *meta = zram->meta;
-	struct zcomp_strm *zstrm;
-	bool locked = false;
 
 	page = bvec->bv_page;
 	if (is_partial_io(bvec)) {
-		/*
-		 * This is a partial IO. We need to read the full page
-		 * before to write the changes.
-		 */
-		uncmem = kmalloc(PAGE_SIZE, GFP_NOIO);
-		if (!uncmem) {
-			ret = -ENOMEM;
-			goto out;
-		}
-		ret = zram_decompress_page(zram, uncmem, index);
-		if (ret)
-			goto out;
+		/* Use a temporary buffer to decompress the page */
+		page = alloc_page(GFP_NOIO|__GFP_HIGHMEM);
+		if (!page)
+			return -ENOMEM;
 	}
 
-	zstrm = zcomp_strm_find(zram->comp);
-	locked = true;
-	user_mem = kmap_atomic(page);
+	ret = zram_decompress_page(zram, page, index);
+	if (unlikely(ret))
+		goto out;
 
 	if (is_partial_io(bvec)) {
-		memcpy(uncmem + offset, user_mem + bvec->bv_offset,
-		       bvec->bv_len);
-		kunmap_atomic(user_mem);
-		user_mem = NULL;
-	} else {
-		uncmem = user_mem;
-	}
+		void *dst = kmap_atomic(bvec->bv_page);
+		void *src = kmap_atomic(page);
 
-	if (page_zero_filled(uncmem)) {
-		if (user_mem)
-			kunmap_atomic(user_mem);
-		/* Free memory associated with this sector now. */
-		write_lock(&zram->meta->tb_lock);
-		zram_free_page(zram, index);
-		zram_set_flag(meta, index, ZRAM_ZERO);
-		write_unlock(&zram->meta->tb_lock);
-
-		atomic64_inc(&zram->stats.zero_pages);
-		ret = 0;
-		goto out;
-	}
-
-	ret = zcomp_compress(zram->comp, zstrm, uncmem, &clen);
-	if (!is_partial_io(bvec)) {
-		kunmap_atomic(user_mem);
-		user_mem = NULL;
-		uncmem = NULL;
-	}
-
-	if (unlikely(ret)) {
-		pr_err("Compression failed! err=%d\n", ret);
-		goto out;
-	}
-	src = zstrm->buffer;
-	if (unlikely(clen > max_zpage_size)) {
-		clen = PAGE_SIZE;
-		if (is_partial_io(bvec))
-			src = uncmem;
-	}
-
-	handle = zs_malloc(meta->mem_pool, clen);
-	if (!handle) {
-		pr_info("Error allocating memory for compressed page: %u, size=%zu\n",
-			index, clen);
-		ret = -ENOMEM;
-		goto out;
-	}
-	cmem = zs_map_object(meta->mem_pool, handle, ZS_MM_WO);
-
-	if ((clen == PAGE_SIZE) && !is_partial_io(bvec)) {
-		src = kmap_atomic(page);
-		copy_page(cmem, src);
+		memcpy(dst + bvec->bv_offset, src + offset, bvec->bv_len);
 		kunmap_atomic(src);
-	} else {
-		memcpy(cmem, src, clen);
+		kunmap_atomic(dst);
 	}
-
-	zcomp_strm_release(zram->comp, zstrm);
-	locked = false;
-	zs_unmap_object(meta->mem_pool, handle);
-
-	/*
-	 * Free memory associated with this sector
-	 * before overwriting unused sectors.
-	 */
-	write_lock(&zram->meta->tb_lock);
-	zram_free_page(zram, index);
-
-	meta->table[index].handle = handle;
-	meta->table[index].size = clen;
-	write_unlock(&zram->meta->tb_lock);
-
-	/* Update stats */
-	atomic64_add(clen, &zram->stats.compr_data_size);
-	atomic64_inc(&zram->stats.pages_stored);
 out:
-	if (locked)
-		zcomp_strm_release(zram->comp, zstrm);
 	if (is_partial_io(bvec))
-		kfree(uncmem);
-	if (ret)
-		atomic64_inc(&zram->stats.failed_writes);
+		__free_page(page);
+
 	return ret;
 }
 
 static int zram_bvec_rw(struct zram *zram, struct bio_vec *bvec, u32 index,
-			int offset, struct bio *bio)
+			int offset, bool is_write)
 {
+	unsigned long start_time = jiffies;
+	int rw_acct = is_write ? REQ_OP_WRITE : REQ_OP_READ;
 	int ret;
-	int rw = bio_data_dir(bio);
 
-	if (rw == READ) {
+	generic_start_io_acct(rw_acct, bvec->bv_len >> SECTOR_SHIFT,
+			&zram->disk->part0);
+
+	if (!is_write) {
 		atomic64_inc(&zram->stats.num_reads);
-		ret = zram_bvec_read(zram, bvec, index, offset, bio);
+		ret = zram_bvec_read(zram, bvec, index, offset);
+		flush_dcache_page(bvec->bv_page);
 	} else {
 		atomic64_inc(&zram->stats.num_writes);
 		ret = zram_bvec_write(zram, bvec, index, offset);
+	}
+
+	generic_end_io_acct(rw_acct, &zram->disk->part0, start_time);
+
+	if (unlikely(ret)) {
+		if (!is_write)
+			atomic64_inc(&zram->stats.failed_reads);
+		else
+			atomic64_inc(&zram->stats.failed_writes);
 	}
 
 	return ret;
@@ -560,7 +434,7 @@ static int zram_bvec_rw(struct zram *zram, struct bio_vec *bvec, u32 index,
 static void zram_bio_discard(struct zram *zram, u32 index,
 			     int offset, struct bio *bio)
 {
-	size_t n = bio->bi_size;
+	size_t n = bio->bi_iter.bi_size;
 
 	/*
 	 * zram manages data in physical block size units. Because logical block
@@ -572,22 +446,20 @@ static void zram_bio_discard(struct zram *zram, u32 index,
 	 * because our intent with a discard request is to save memory.  So
 	 * skipping this logical block is appropriate here.
 	 */
+
 	if (offset) {
-		if (n < offset)
+		if (n <= (PAGE_SIZE - offset))
 			return;
 
-		n -= offset;
+		n -= (PAGE_SIZE - offset);
 		index++;
 	}
 
 	while (n >= PAGE_SIZE) {
-		/*
-		 * Discard request can be large so the lock hold times could be
-		 * lengthy.  So take the lock once per page.
-		 */
-		write_lock(&zram->meta->tb_lock);
+		zram_slot_lock(zram, index);
 		zram_free_page(zram, index);
-		write_unlock(&zram->meta->tb_lock);
+		zram_slot_unlock(zram, index);
+		atomic64_inc(&zram->stats.notify_free);
 		index++;
 		n -= PAGE_SIZE;
 	}
@@ -595,37 +467,31 @@ static void zram_bio_discard(struct zram *zram, u32 index,
 
 static void zram_reset_device(struct zram *zram, bool reset_capacity)
 {
-	size_t index;
-	struct zram_meta *meta;
+	struct zcomp *comp;
+	u64 disksize;
 
 	down_write(&zram->init_lock);
+
 	if (!init_done(zram)) {
 		up_write(&zram->init_lock);
 		return;
 	}
 
-	meta = zram->meta;
-	/* Free all pages that are still in this zram device */
-	for (index = 0; index < zram->disksize >> PAGE_SHIFT; index++) {
-		unsigned long handle = meta->table[index].handle;
-		if (!handle)
-			continue;
-
-		zs_free(meta->mem_pool, handle);
-	}
-
-	zcomp_destroy(zram->comp);
-	zram->max_comp_streams = 1;
-
-	zram_meta_free(zram->meta);
-	zram->meta = NULL;
-	/* Reset stats */
-	memset(&zram->stats, 0, sizeof(zram->stats));
-
+	comp = zram->comp;
+	disksize = zram->disksize;
 	zram->disksize = 0;
+
+	set_capacity(zram->disk, 0);
+	part_stat_set_all(&zram->disk->part0, 0);
+
+	up_write(&zram->init_lock);
+	/* I/O operation under all of CPU are done so let's free */
+	zram_meta_free(zram, disksize);
+	memset(&zram->stats, 0, sizeof(zram->stats));
+	zcomp_destroy(comp);
+
 	if (reset_capacity)
 		set_capacity(zram->disk, 0);
-	up_write(&zram->init_lock);
 }
 
 static ssize_t disksize_store(struct device *dev,
@@ -633,7 +499,7 @@ static ssize_t disksize_store(struct device *dev,
 {
 	u64 disksize;
 	struct zcomp *comp;
-	struct zram_meta *meta;
+	struct zram *meta;
 	struct zram *zram = dev_to_zram(dev);
 	int err;
 
@@ -719,50 +585,45 @@ out:
 
 static void __zram_make_request(struct zram *zram, struct bio *bio)
 {
-	int offset, i;
-	u32 index;
-	struct bio_vec *bvec;
 
-	index = bio->bi_sector >> SECTORS_PER_PAGE_SHIFT;
-	offset = (bio->bi_sector &
+	int offset;
+	u32 index;
+	struct bio_vec bvec;
+	struct bvec_iter iter;
+
+	index = bio->bi_iter.bi_sector >> SECTORS_PER_PAGE_SHIFT;
+	offset = (bio->bi_iter.bi_sector &
 		  (SECTORS_PER_PAGE - 1)) << SECTOR_SHIFT;
 
-	if (unlikely(bio->bi_rw & REQ_DISCARD)) {
+	switch (bio_op(bio)) {
+	case REQ_OP_DISCARD:
+	case REQ_OP_WRITE_ZEROES:
 		zram_bio_discard(zram, index, offset, bio);
-		bio_endio(bio, 0);
+		bio_endio(bio);
 		return;
+	default:
+		break;
 	}
 
-	bio_for_each_segment(bvec, bio, i) {
-		int max_transfer_size = PAGE_SIZE - offset;
+	bio_for_each_segment(bvec, bio, iter) {
+		struct bio_vec bv = bvec;
+		unsigned int unwritten = bvec.bv_len;
 
-		if (bvec->bv_len > max_transfer_size) {
-			/*
-			 * zram_bvec_rw() can only make operation on a single
-			 * zram page. Split the bio vector.
-			 */
-			struct bio_vec bv;
-
-			bv.bv_page = bvec->bv_page;
-			bv.bv_len = max_transfer_size;
-			bv.bv_offset = bvec->bv_offset;
-
-			if (zram_bvec_rw(zram, &bv, index, offset, bio) < 0)
+		do {
+			bv.bv_len = min_t(unsigned int, PAGE_SIZE - offset,
+							unwritten);
+			if (zram_bvec_rw(zram, &bv, index, offset,
+					op_is_write(bio_op(bio))) < 0)
 				goto out;
 
-			bv.bv_len = bvec->bv_len - max_transfer_size;
-			bv.bv_offset += max_transfer_size;
-			if (zram_bvec_rw(zram, &bv, index + 1, 0, bio) < 0)
-				goto out;
-		} else
-			if (zram_bvec_rw(zram, bvec, index, offset, bio) < 0)
-				goto out;
+			bv.bv_offset += bv.bv_len;
+			unwritten -= bv.bv_len;
 
-		update_position(&index, &offset, bvec);
+			update_position(&index, &offset, &bv);
+		} while (unwritten);
 	}
 
-	set_bit(BIO_UPTODATE, &bio->bi_flags);
-	bio_endio(bio, 0);
+	bio_endio(bio);
 	return;
 
 out:
@@ -772,46 +633,55 @@ out:
 /*
  * Handler function for all zram I/O requests.
  */
-static void zram_make_request(struct request_queue *queue, struct bio *bio)
+static blk_qc_t zram_make_request(struct request_queue *queue, struct bio *bio)
 {
 	struct zram *zram = queue->queuedata;
-
-	down_read(&zram->init_lock);
-	if (unlikely(!init_done(zram)))
-		goto error;
-
-	if (!valid_io_request(zram, bio)) {
+	if (!valid_io_request(zram, bio->bi_iter.bi_sector,
+					bio->bi_iter.bi_size)) {
 		atomic64_inc(&zram->stats.invalid_io);
 		goto error;
 	}
 
 	__zram_make_request(zram, bio);
-	up_read(&zram->init_lock);
-
-	return;
+	return BLK_QC_T_NONE;
 
 error:
-	up_read(&zram->init_lock);
 	bio_io_error(bio);
+	return BLK_QC_T_NONE;
 }
 
 static void zram_slot_free_notify(struct block_device *bdev,
 				unsigned long index)
 {
 	struct zram *zram;
-	struct zram_meta *meta;
 
 	zram = bdev->bd_disk->private_data;
-	meta = zram->meta;
 
-	write_lock(&meta->tb_lock);
+	zram_slot_lock(zram, index);
 	zram_free_page(zram, index);
-	write_unlock(&meta->tb_lock);
+	zram_slot_unlock(zram, index);
 	atomic64_inc(&zram->stats.notify_free);
 }
 
+static int zram_open(struct block_device *bdev, fmode_t mode)
+{
+	int ret = 0;
+	struct zram *zram;
+
+	WARN_ON(!mutex_is_locked(&bdev->bd_mutex));
+
+	zram = bdev->bd_disk->private_data;
+	/* zram was claimed to reset so open request fails */
+	if (zram->claim)
+		ret = -EBUSY;
+
+	return ret;
+}
+
 static const struct block_device_operations zram_devops = {
+	.open = zram_open;
 	.swap_slot_free_notify = zram_slot_free_notify,
+	.rw_page = zram_rw_page,
 	.owner = THIS_MODULE
 };
 
@@ -858,34 +728,47 @@ static struct attribute_group zram_disk_attr_group = {
 	.attrs = zram_disk_attrs,
 };
 
-static int create_device(struct zram *zram, int device_id)
+static int create_device(void)
 {
-	int ret = -ENOMEM;
+	struct zram *zram;
+	struct request_queue *queue;
+	int ret, device_id;
+
+	zram = kzalloc(sizeof(struct zram), GFP_KERNEL);
+	if (!zram)
+		return -ENOMEM;
+
+	ret = idr_alloc(&zram_index_idr, zram, 0, 0, GFP_KERNEL);
+	if (ret < 0)
+		goto out_free_dev;
+	device_id = ret;
 
 	init_rwsem(&zram->init_lock);
 
-	zram->queue = blk_alloc_queue(GFP_KERNEL);
-	if (!zram->queue) {
+	queue = blk_alloc_queue(GFP_KERNEL);
+	if (!queue) {
 		pr_err("Error allocating disk queue for device %d\n",
 			device_id);
-		goto out;
+		ret = -ENOMEM;
+		goto out_free_idr;
 	}
 
-	blk_queue_make_request(zram->queue, zram_make_request);
-	zram->queue->queuedata = zram;
+	blk_queue_make_request(queue, zram_make_request);
 
 	 /* gendisk structure */
 	zram->disk = alloc_disk(1);
 	if (!zram->disk) {
 		pr_warn("Error allocating disk structure for device %d\n",
 			device_id);
+		ret = -ENOMEM;
 		goto out_free_queue;
 	}
 
 	zram->disk->major = zram_major;
 	zram->disk->first_minor = device_id;
 	zram->disk->fops = &zram_devops;
-	zram->disk->queue = zram->queue;
+	zram->disk->queue = queue;
+	zram->disk->queue->queuedata = zram;
 	zram->disk->private_data = zram;
 	snprintf(zram->disk->disk_name, 16, "zram%d", device_id);
 
@@ -905,6 +788,7 @@ static int create_device(struct zram *zram, int device_id)
 	blk_queue_io_opt(zram->disk->queue, PAGE_SIZE);
 	zram->disk->queue->limits.discard_granularity = PAGE_SIZE;
 	zram->disk->queue->limits.max_discard_sectors = UINT_MAX;
+	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, zram->disk->queue);
 	/*
 	 * zram_bio_discard() will clear all logical blocks if logical block
 	 * size is identical with physical block size(PAGE_SIZE). But if it is
@@ -914,10 +798,7 @@ static int create_device(struct zram *zram, int device_id)
 	 * zeroed.
 	 */
 	if (ZRAM_LOGICAL_BLOCK_SIZE == PAGE_SIZE)
-		zram->disk->queue->limits.discard_zeroes_data = 1;
-	else
-		zram->disk->queue->limits.discard_zeroes_data = 0;
-	queue_flag_set_unlocked(QUEUE_FLAG_DISCARD, zram->disk->queue);
+		blk_queue_max_write_zeroes_sectors(zram->disk->queue, UINT_MAX);
 
 	add_disk(zram->disk);
 
@@ -928,94 +809,73 @@ static int create_device(struct zram *zram, int device_id)
 		goto out_free_disk;
 	}
 	strlcpy(zram->compressor, default_compressor, sizeof(zram->compressor));
-	zram->meta = NULL;
 	zram->max_comp_streams = 1;
-	return 0;
+	return device_id;
 
 out_free_disk:
 	del_gendisk(zram->disk);
 	put_disk(zram->disk);
 out_free_queue:
 	blk_cleanup_queue(zram->queue);
-out:
+out_free_idr:
+	idr_remove(&zram_index_idr, device_id);
+out_free_dev:
+	kfree(zram);
 	return ret;
 }
 
-static void destroy_device(struct zram *zram)
+static void destroy_devices(void)
 {
-	sysfs_remove_group(&disk_to_dev(zram->disk)->kobj,
-			&zram_disk_attr_group);
-
-	del_gendisk(zram->disk);
-	put_disk(zram->disk);
-
-	blk_cleanup_queue(zram->queue);
+	class_unregister(&zram_control_class);
+	idr_for_each(&zram_index_idr, &zram_remove_cb, NULL);
+	idr_destroy(&zram_index_idr);
+	unregister_blkdev(zram_major, "zram");
+	cpuhp_remove_multi_state(CPUHP_ZCOMP_PREPARE);
 }
 
 static int __init zram_init(void)
 {
-	int ret, dev_id;
+	int ret;
 
-	if (num_devices > max_num_devices) {
-		pr_warn("Invalid value for num_devices: %u\n",
-				num_devices);
-		ret = -EINVAL;
-		goto out;
+	ret = cpuhp_setup_state_multi(CPUHP_ZCOMP_PREPARE, "block/zram:prepare",
+				      zcomp_cpu_up_prepare, zcomp_cpu_dead);
+	if (ret < 0)
+		return ret;
+
+	ret = class_register(&zram_control_class);
+	if (ret) {
+		pr_err("Unable to register zram-control class\n");
+		cpuhp_remove_multi_state(CPUHP_ZCOMP_PREPARE);
+		return ret;
 	}
 
 	zram_major = register_blkdev(0, "zram");
 	if (zram_major <= 0) {
-		pr_warn("Unable to get major number\n");
-		ret = -EBUSY;
-		goto out;
+		pr_err("Unable to get major number\n");
+		class_unregister(&zram_control_class);
+		cpuhp_remove_multi_state(CPUHP_ZCOMP_PREPARE);
+		return -EBUSY;
 	}
 
-	/* Allocate the device array and initialize each one */
-	zram_devices = kzalloc(num_devices * sizeof(struct zram), GFP_KERNEL);
-	if (!zram_devices) {
-		ret = -ENOMEM;
-		goto unregister;
+	while (num_devices != 0) {
+		mutex_lock(&zram_index_mutex);
+		ret = zram_add();
+		mutex_unlock(&zram_index_mutex);
+		if (ret < 0)
+			goto out_error;
+		num_devices--;
 	}
-
-	for (dev_id = 0; dev_id < num_devices; dev_id++) {
-		ret = create_device(&zram_devices[dev_id], dev_id);
-		if (ret)
-			goto free_devices;
-	}
-
-	pr_info("Created %u device(s) ...\n", num_devices);
 
 	return 0;
 
-free_devices:
-	while (dev_id)
-		destroy_device(&zram_devices[--dev_id]);
-	kfree(zram_devices);
-unregister:
-	unregister_blkdev(zram_major, "zram");
-out:
+out_error:
+	destroy_devices();
 	return ret;
 }
 
 static void __exit zram_exit(void)
 {
-	int i;
-	struct zram *zram;
-
-	for (i = 0; i < num_devices; i++) {
-		zram = &zram_devices[i];
-
-		destroy_device(zram);
-		/*
-		 * Shouldn't access zram->disk after destroy_device
-		 * because destroy_device already released zram->disk.
-		 */
-		zram_reset_device(zram, false);
-	}
-
-	unregister_blkdev(zram_major, "zram");
-
-	kfree(zram_devices);
+	destroy_devices();
 	pr_debug("Cleanup done!\n");
 }
 
