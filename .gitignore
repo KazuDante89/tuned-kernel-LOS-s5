@@ -29,6 +29,7 @@ modules.builtin
 *.xz
 *.lzo
 *.gcno
+*.save
 
 #
 # Top-level generic files
