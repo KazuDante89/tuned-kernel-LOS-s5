@@ -1869,8 +1869,8 @@ static void get_scan_count(struct mem_cgroup_zone *mz, struct scan_control *sc,
 	 * With swappiness at 100, anonymous and file have the same priority.
 	 * This scanning priority is essentially the inverse of IO cost.
 	 */
-	anon_prio = 3; //60
-	file_prio = 2; //140
+	anon_prio = 4; //60
+	file_prio = 3; //140
 
 	/*
 	 * OK, so we have swap space and a fair amount of page cache

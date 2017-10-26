@@ -10,7 +10,7 @@
 # Parameters to be configured manually
 #######################################
 
-BOEFFLA_VERSION="4.1-beta14-CM14.1-g900f"
+BOEFFLA_VERSION="4.1-beta15-CM14.1-g900f"
 
 TOOLCHAIN="/root/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
 
