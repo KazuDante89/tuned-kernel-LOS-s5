@@ -781,12 +781,12 @@ if [ "apply_governor_profile" == "$1" ]; then
 		echo "20000 1400000:40000 1700000:20000" > /sys/devices/system/cpu/cpufreq/interactive/above_hispeed_delay 
 		echo "0" > /sys/devices/system/cpu/cpufreq/interactive/boost 
 		echo "" > /sys/devices/system/cpu/cpufreq/interactive/boostpulse 
-		echo "80000" > /sys/devices/system/cpu/cpufreq/interactive/boostpulse_duration 
+		echo "40000" > /sys/devices/system/cpu/cpufreq/interactive/boostpulse_duration 
 		echo "100" > /sys/devices/system/cpu/cpufreq/interactive/go_hispeed_load 
 		echo "300000" > /sys/devices/system/cpu/cpufreq/interactive/hispeed_freq 
 		echo "1" > /sys/devices/system/cpu/cpufreq/interactive/io_is_busy 
 		echo "5000" > /sys/devices/system/cpu/cpufreq/interactive/min_sample_time 
-		echo "100000" > /sys/devices/system/cpu/cpufreq/interactive/sampling_down_factor 
+		echo "10000" > /sys/devices/system/cpu/cpufreq/interactive/sampling_down_factor 
 		echo "1036800" > /sys/devices/system/cpu/cpufreq/interactive/sync_freq 
 		echo "85 900000:90 1200000:70" > /sys/devices/system/cpu/cpufreq/interactive/target_loads 
 		echo "100000" > /sys/devices/system/cpu/cpufreq/interactive/timer_rate 
