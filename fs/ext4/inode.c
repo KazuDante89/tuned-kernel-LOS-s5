@@ -3657,7 +3657,7 @@ void ext4_set_inode_flags(struct inode *inode)
 		new_fl |= S_APPEND;
 	if (flags & EXT4_IMMUTABLE_FL)
 		new_fl |= S_IMMUTABLE;
-	if (flags & EXT4_NOATIME_FL)
+//	if (flags & EXT4_NOATIME_FL)
 		new_fl |= S_NOATIME;
 	if (flags & EXT4_DIRSYNC_FL)
 		new_fl |= S_DIRSYNC;

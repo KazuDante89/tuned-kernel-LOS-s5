@@ -43,7 +43,7 @@ if [ "lov_gov_profiles" == "$1" ]; then
 fi
 
 if [ "lov_cpu_hotplug_profiles" == "$1" ]; then
-	echo "Default;Optimized;1 core max;2 cores max;3 cores max;2 cores min;3 cores min;4 cores min;2 cores exact;3 cores exact;zzmoove native default;zzmoove native 1 core max;zzmoove native 2 cores max;zzmoove native 3 cores max;zzmoove native 2 cores min;zzmoove native 3 cores min;zzmoove native 4 cores min"
+	echo "Tuned;Default;Optimized;1 core max;2 cores max;3 cores max;2 cores min;3 cores min;4 cores min;2 cores exact;3 cores exact;zzmoove native default;zzmoove native 1 core max;zzmoove native 2 cores max;zzmoove native 3 cores max;zzmoove native 2 cores min;zzmoove native 3 cores min;zzmoove native 4 cores min"
 	exit 0
 fi
 
@@ -435,6 +435,7 @@ fi
 
 if [ "apply_cpu_hotplug_profile" == "$1" ]; then
 
+	echo "0" >/sys/module/tuned_plug/parameters/tuned_plug_active
 
 	if [ `busybox cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor | busybox grep zzmoove` ]; then
 		echo "0" > /sys/devices/system/cpu/cpufreq/zzmoove/hotplug_max_limit
@@ -442,7 +443,14 @@ if [ "apply_cpu_hotplug_profile" == "$1" ]; then
 		echo "2" > /sys/devices/system/cpu/cpufreq/zzmoove/disable_hotplug
 		echo "2" > /sys/devices/system/cpu/cpufreq/zzmoove/disable_hotplug_sleep
 	fi
-
+        if [ "Tuned" == "$2" ]; then
+                echo "1" >/sys/devices/system/cpu/cpu0/online_control
+                echo "1" >/sys/devices/system/cpu/cpu1/online_control
+                echo "1" >/sys/devices/system/cpu/cpu2/online_control
+                echo "1" >/sys/devices/system/cpu/cpu3/online_control
+		echo "1" >/sys/module/tuned_plug/parameters/tuned_plug_active
+                exit 0
+        fi
 	if [ "Default" == "$2" ]; then
 		echo "0" >/sys/devices/system/cpu/cpu0/online_control
 		echo "0" >/sys/devices/system/cpu/cpu1/online_control
@@ -1128,24 +1136,24 @@ if [ "apply_eq_bands" == "$1" ]; then
 	exit 0
 fi
 
-if [ "apply_ext4_tweaks" == "$1" ]; then
-	if [ "1" == "$2" ]; then
-		busybox sync
-		busybox mount -o remount,commit=20,noatime $CACHE_DEVICE /cache
-		busybox sync
-		busybox mount -o remount,commit=20,noatime $DATA_DEVICE /data
-		busybox sync
-	fi
-
-	if [ "0" == "$2" ]; then
-		busybox sync
-		busybox mount -o remount,commit=0,noatime $CACHE_DEVICE /cache
-		busybox sync
-		busybox mount -o remount,commit=0,noatime $DATA_DEVICE /data
-		busybox sync
-	fi
-	exit 0
-fi
+#if [ "apply_ext4_tweaks" == "$1" ]; then
+#	if [ "1" == "$2" ]; then
+#		busybox sync
+#		busybox mount -o remount,commit=20,noatime $CACHE_DEVICE /cache
+#		busybox sync
+#		busybox mount -o remount,commit=20,noatime $DATA_DEVICE /data
+#		busybox sync
+#	fi
+#
+#	if [ "0" == "$2" ]; then
+#		busybox sync
+#		busybox mount -o remount,commit=0,noatime $CACHE_DEVICE /cache
+#		busybox sync
+#		busybox mount -o remount,commit=0,noatime $DATA_DEVICE /data
+#		busybox sync
+#	fi
+#	exit 0
+#fi
 
 
 #if [ "apply_zram" == "$1" ]; then

@@ -2,6 +2,10 @@ if ARCH_MSM
 
 menu "MSM SoC Type"
 
+config TUNED_PLUG
+	bool "Enable tuned-plug cpu hotplug driver"
+	default n
+
 config ARCH_MSM7X01A
 	bool "MSM7x00A / MSM7x01A"
 	select ARCH_MSM_ARM11
