@@ -357,14 +357,14 @@ CC		= $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 
-OPTS           = -fno-conserve-stack -fmodulo-sched -fmodulo-sched-allow-regmoves -ftree-vectorize \
+OPTS           = -fconserve-stack -fmodulo-sched -fmodulo-sched-allow-regmoves -ftree-vectorize \
                  -fvect-cost-model=cheap -ftree-partial-pre \
                  -fgcse-after-reload -fgcse-lm -fsched-spec-load -ffast-math -fsingle-precision-constant \
-                 -fpredictive-commoning
+                 -fpredictive-commoning -fipa-icf -fopenacc -fsplit-loops
 # -fgcse-sm
 GCC6WARNINGS   = -Wno-bool-compare -Wno-misleading-indentation -Wno-format -Wno-strict-aliasing -Wno-tautological-compare -Wno-discarded-array-qualifiers
 GCC7WARNINGS   = $(GCC6WARNINGS) -Wno-int-in-bool-context -Wno-memset-elt-size -Wno-parentheses -Wno-bool-operation -Wno-duplicate-decl-specifier -Wno-stringop-overflow -Wno-format-overflow -Wno-switch-unreachable -Wno-pointer-compare
-GCC8WARNINGS   = $(GCC7WARNINGS) -Wno-multistatement-macros -Wno-error=sizeof-pointer-div -Wno-sizeof-pointer-div
+GCC8WARNINGS   = $(GCC7WARNINGS) -Wno-multistatement-macros -Wno-error=sizeof-pointer-div -Wno-sizeof-pointer-div -Wno-logical-not-parentheses -Wno-packed-not-aligned -Wno-shift-overflow -Wno-switch-bool
 
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
@@ -580,7 +580,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
 else
-KBUILD_CFLAGS	+= -O2 $(OPTS) $(GCC6WARNINGS)
+KBUILD_CFLAGS	+= -O2 $(OPTS) $(GCC8WARNINGS)
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
