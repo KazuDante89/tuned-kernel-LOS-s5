@@ -13,7 +13,8 @@
 BOEFFLA_VERSION="4.1-beta15-CM14.1-g900f"
 
 #TOOLCHAIN="/root/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
-TOOLCHAIN="/root/arm-eabi-8.x/bin/arm-eabi-"
+TOOLCHAIN="/root/gcc-linaro-7.1.1-2017.08-x86_64_arm-eabi/bin/arm-eabi-"
+#TOOLCHAIN="/root/gcc-arm-none-eabi-6-2017-q2-update/bin/arm-none-eabi-"
 
 ARCHITECTURE=arm
 COMPILER_FLAGS_KERNEL="-Wno-maybe-uninitialized -Wno-array-bounds"
