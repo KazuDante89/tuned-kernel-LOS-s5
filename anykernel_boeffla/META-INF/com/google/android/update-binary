@@ -117,6 +117,10 @@ if [ "$(file_getprop /tmp/anykernel/anykernel.sh do.initd)" == 1 ]; then
 	ui_print " ";
 
 	mount -o remount,rw -t auto /system;
+	if [ -f /system/bin/mpdecision ]; then
+		cp /system/bin/mpdecision /system/bin/mpdecision.bkp
+		rm /system/bin/mpdecision
+	fi;
 	if [ ! -d $root/system/etc/init.d ]; then
 	    mkdir $root/system/etc/init.d;
 	fi;

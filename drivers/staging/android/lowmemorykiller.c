@@ -66,19 +66,22 @@
 static uint32_t lowmem_debug_level = 5;
 static int lowmem_adj[6] = {
 	0,
-	1,
-	6,
-	12,
+	100,
+	200,
+	300,
+	900,
+	906
 };
-static int lowmem_adj_size = 4;
+static int lowmem_adj_size = 6;
 static int lowmem_minfree[6] = {
-	3 * 512,	/* 6MB */
-	2 * 1024,	/* 8MB */
-	4 * 1024,	/* 16MB */
-	16 * 1024,	/* 64MB */
+	36 * 512,	/* 72MB */
+	45 * 512,	/* 90MB */
+	54 * 512,	/* 108MB */
+	63 * 512,	/* 64MB */
+	72 * 512,	/* 144MB */
+	90 * 512	/* 180MB */
 };
-static int lowmem_minfree_size = 4;
-static int lmk_fast_run = 1;
+static int lowmem_minfree_size = 6;
 static int lowmemint = 1000;
 
 #define lowmem_print(level, x...)			\
@@ -190,7 +193,7 @@ static struct notifier_block lmk_vmpr_nb = {
 	.notifier_call = lmk_vmpressure_notifier,
 };
 #endif
-
+#if 0
 static int test_task_flag(struct task_struct *p, int flag)
 {
 	struct task_struct *t;
@@ -206,7 +209,7 @@ static int test_task_flag(struct task_struct *p, int flag)
 
 	return 0;
 }
-
+#endif
 static DEFINE_MUTEX(scan_mutex);
 
 int can_use_cma_pages(gfp_t gfp_mask)
@@ -320,43 +323,40 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
 	struct task_struct *selected = NULL;
-	int tasksize;
-	int i;
-	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
-	int minfree = 0;
-	int selected_oom_score;
+	int tasksize, i, minfree, selected_oom_score, other_file;
+	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	int other_file;
 
-		if (mutex_lock_interruptible(&scan_mutex) < 0)
-			return 0;
+	if (mutex_lock_interruptible(&scan_mutex) < 0)
+		return 0;
 
-
-	other_file = global_page_state(NR_FILE_PAGES) - global_page_state(NR_SHMEM)
-		- global_page_state(NR_UNEVICTABLE);
+	other_file = global_page_state(NR_INACTIVE_FILE);
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 
-	for (i = array_size; i >= 0; i--) {
+	for (i = array_size-1; i >= 0; i--) {
 		minfree = lowmem_minfree[i];
+		lowmem_print(5,"%u < %u ???????", other_file, minfree);
 		if (other_file < minfree) {
 			min_score_adj = lowmem_adj[i];
 			break;
 		}
 	}
 
+	lowmem_print(4,"min_score_adj: %d", min_score_adj);
+
 	if (i < 0) {
-		lowmem_print(5, "i < 0. min_score_adj = %d. We still have %u pages in cache", min_score_adj, other_file);
+		lowmem_print(3, "i < 0. min_score_adj = %d. We still have %u pages in cache", min_score_adj, other_file);
 		lowmemint = 1000;
 		goto out;
 	}
 
 	if (lowmemint != 200 && other_file < lowmem_minfree[i-1]) {
 		lowmemint = 200;
-		lowmem_print(1, "A sudden usage of too much RAM! Going fast!");
+		lowmem_print(2, "A sudden usage of too much RAM! Going fast!");
 	}
 
 	restart:
@@ -370,14 +370,14 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 
 		if (tsk->flags & PF_KTHREAD)
 			continue;
-
+#if 0
 		/* if task no longer has any memory ignore it */
 		if (test_task_flag(tsk, TIF_MM_RELEASED))
 			continue;
 
 		if (test_task_flag(tsk, TIF_MEMDIE))
 			continue;
-
+#endif
 		oom_score = oom_badness(tsk, NULL, NULL, totalram_pages + total_swap_pages);
 
 		if (!oom_score || oom_score < min_score_adj)
@@ -395,9 +395,13 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		}
 	if (!selected) {
                 rcu_read_unlock();
-                if (i>0)
+                if (i>0) {
+			lowmem_print(4,"i: %u . lowmem_adj[i]: %u", i, lowmem_adj[i]);
 			min_score_adj = lowmem_adj[--i];
-                else goto out;
+			lowmem_print(4,"min_score_adj decreased to: %d", min_score_adj);
+                }
+		else goto out;
+
 		lowmem_print(4, "Nothing to kill. Advancing to %d", min_score_adj);
 		goto restart;
 	}
@@ -477,15 +481,10 @@ static void timelylmk(struct work_struct *work)
 
 static int __init lowmem_init(void)
 {
-#ifndef TIMELYLMK
-	register_shrinker(&lowmem_shrinker);
-	vmpressure_notifier_register(&lmk_vmpr_nb);
-#else
 	struct delayed_work *dwork;
 	dwork = kmalloc(sizeof(*dwork), GFP_KERNEL);
 	INIT_DELAYED_WORK_DEFERRABLE(dwork, timelylmk);
-	queue_delayed_work(system_wq, dwork, 4000);
-#endif
+	queue_delayed_work(system_wq, dwork, 40000);
 
 	return 0;
 }
@@ -589,7 +588,6 @@ module_param_array_named(adj, lowmem_adj, int, &lowmem_adj_size,
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
-module_param_named(lmk_fast_run, lmk_fast_run, int, S_IRUGO | S_IWUSR);
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);

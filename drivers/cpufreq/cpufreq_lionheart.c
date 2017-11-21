@@ -43,7 +43,7 @@
 #include <linux/slab.h>
 #include <linux/earlysuspend.h>
 
-#define DEF_FREQUENCY_UP_THRESHOLD		(60)
+#define DEF_FREQUENCY_UP_THRESHOLD		(70)
 #define DEF_FREQUENCY_DOWN_THRESHOLD		(20)
 
 static unsigned int min_sampling_rate;
