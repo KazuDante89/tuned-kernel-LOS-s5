@@ -324,7 +324,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	struct task_struct *tsk;
 	struct task_struct *selected = NULL;
 	int tasksize, i, minfree, selected_oom_score, other_file;
-	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
+	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int array_size = ARRAY_SIZE(lowmem_adj);
 
 	if (mutex_lock_interruptible(&scan_mutex) < 0)
@@ -337,7 +337,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 
-	for (i = array_size-1; i >= 0; i--) {
+	for (i = array_size; i >= 0; i--) {
 		minfree = lowmem_minfree[i];
 		lowmem_print(5,"%u < %u ???????", other_file, minfree);
 		if (other_file < minfree) {

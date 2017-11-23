@@ -39,7 +39,7 @@ static void inline down_one(void){
 		if (cpu_online(i)) {
 			cpu_down(i);
 			pr_info("tunedplug: DOWN cpu %d", i);
-			msleep(1000);
+			msleep_interruptible(1000);
 			break;
 		}
 	}
@@ -70,7 +70,7 @@ static void __cpuinit tuned_plug_work_fn(struct work_struct *work)
 		toolow=0;
 	}
 
-//	pr_info("tunedplug: run_stat: %d . toolow: %d . lowthresh: %d . sampling: %d", nr_run_stat, toolow, lowthresh, sampling_time);
+	//pr_info("tunedplug: run_stat: %d . toolow: %d . lowthresh: %d . sampling: %d", nr_run_stat, toolow, lowthresh, sampling_time);
 
 	if (nr_run_stat < lowthresh) {
 		if (nr_cpus > 1) down_one();
@@ -86,17 +86,14 @@ static void __cpuinit tuned_plug_work_fn(struct work_struct *work)
 						cpu_up(i2);
 						pr_info("tunedplug: UP cpu %d", i2);
 						toolow=0;
-						if (nr_run_stat < lowthresh*2) {
-							msleep(1000);
+						if (nr_run_stat < lowthresh*2)
 							break;
-						}
 					}
 				}
 			}
-			else toolow++;
+			else if (nr_cpus > 1) toolow++;
 		}
 	}
-	else { msleep(1000); }
 }
 
 static int __cpuinit lcd_notifier_callback(struct notifier_block *this,
