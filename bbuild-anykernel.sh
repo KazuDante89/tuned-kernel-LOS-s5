@@ -10,7 +10,7 @@
 # Parameters to be configured manually
 #######################################
 
-BOEFFLA_VERSION="4.1-beta15-CM14.1-g900f"
+BOEFFLA_VERSION="4.1-beta16-CM14.1-g900f"
 
 #TOOLCHAIN="/root/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
 TOOLCHAIN="/root/gcc-linaro-7.1.1-2017.08-x86_64_arm-eabi/bin/arm-eabi-"
@@ -154,7 +154,7 @@ step3_compile()
 	if [ -z "$OUTPUT_FOLDER" ]; then
 		make -j$NUM_CPUS CFLAGS_KERNEL="$COMPILER_FLAGS_KERNEL" CFLAGS_MODULE="$COMPILER_FLAGS_MODULE" 2>&1 |tee ../compile.log
 	else
-		make -j$NUM_CPUS O=$OUTPUT_FOLDER CFLAGS_KERNEL="$COMPILER_FLAGS_KERNEL" CFLAGS_MODULE="$COMPILER_FLAGS_MODULE" 2>&1 |tee ../compile.log
+		make -j$NUM_CPUS O=$OUTPUT_FOLDER CONFIG_DEBUG_SECTION_MISMATCH=y CFLAGS_KERNEL="$COMPILER_FLAGS_KERNEL" CFLAGS_MODULE="$COMPILER_FLAGS_MODULE" 2>&1 |tee ../compile.log
 	fi
 
 	# compile dtb if required

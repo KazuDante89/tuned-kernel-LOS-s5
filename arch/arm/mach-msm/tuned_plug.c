@@ -21,7 +21,7 @@
 
 #define DEF_SAMPLING msecs_to_jiffies(50)
 
-static struct notifier_block lcd_notif;
+//static struct notifier_block lcd_notif;
 static struct delayed_work tuned_plug_work;
 static struct workqueue_struct *tunedplug_wq;
 
@@ -29,9 +29,11 @@ static unsigned int tuned_plug_active = 1;
 module_param(tuned_plug_active, uint, 0644);
 
 static unsigned int sampling_time = 0;
-static unsigned int lowthresh = 0;
+static unsigned int lowthresh = 4000;
 
-static bool displayon = false;
+//static DEFINE_MUTEX(tplug_mutex);
+
+static bool displayon = true;
 
 static void inline down_one(void){
 	unsigned int i;
@@ -95,21 +97,27 @@ static void __cpuinit tuned_plug_work_fn(struct work_struct *work)
 		}
 	}
 }
-
+#if 0
 static int __cpuinit lcd_notifier_callback(struct notifier_block *this,
 				unsigned long event, void *data)
 {
         switch (event)
         {
-                case LCD_EVENT_OFF_END:
+                case LCD_EVENT_OFF_START:
+			mutex_lock(&tplug_mutex);
 			displayon = false;
+			mutex_unlock(&tplug_mutex);
                         break;
 
-                case LCD_EVENT_ON_START:
+                case LCD_EVENT_ON_END:
+			mutex_lock(&tplug_mutex);
+			pr_info("tunedplug: screen on again!");
 			displayon = true;
         	        lowthresh = 3000;
 	                sampling_time = DEF_SAMPLING;
 			if (!cpu_online(1)) cpu_up(1);
+			if (!cpu_online(2)) cpu_up(2);
+			mutex_unlock(&tplug_mutex);
                         break;
 
                 default:
@@ -117,7 +125,7 @@ static int __cpuinit lcd_notifier_callback(struct notifier_block *this,
         }
         return 0;
 }
-
+#endif
 int __init tuned_plug_init(void)
 {
 
@@ -128,10 +136,11 @@ int __init tuned_plug_init(void)
 	sampling_time = DEF_SAMPLING;
 
 	queue_delayed_work_on(0, tunedplug_wq, &tuned_plug_work, msecs_to_jiffies(10000));
-
+#if 0
         lcd_notif.notifier_call = lcd_notifier_callback;
         if (lcd_register_client(&lcd_notif) != 0)
                 pr_err("%s: Failed to register lcd callback\n", __func__);
+#endif
 
 	return 0;
 }

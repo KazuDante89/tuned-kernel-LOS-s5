@@ -43,7 +43,7 @@ if [ "lov_gov_profiles" == "$1" ]; then
 fi
 
 if [ "lov_cpu_hotplug_profiles" == "$1" ]; then
-	echo "Tuned;Default;Optimized;1 core max;2 cores max;3 cores max;2 cores min;3 cores min;4 cores min;2 cores exact;3 cores exact;zzmoove native default;zzmoove native 1 core max;zzmoove native 2 cores max;zzmoove native 3 cores max;zzmoove native 2 cores min;zzmoove native 3 cores min;zzmoove native 4 cores min"
+	echo "Tuned;MPDecision;Optimized MPD;1 core max;2 cores max;3 cores max;2 cores min;3 cores min;4 cores min;2 cores exact;3 cores exact;zzmoove native default;zzmoove native 1 core max;zzmoove native 2 cores max;zzmoove native 3 cores max;zzmoove native 2 cores min;zzmoove native 3 cores min;zzmoove native 4 cores min"
 	exit 0
 fi
 
@@ -463,7 +463,7 @@ if [ "apply_cpu_hotplug_profile" == "$1" ]; then
 		fi
                 exit 0
         fi
-	if [ "Default" == "$2" ]; then
+	if [ "MPDecision" == "$2" ]; then
 		echo "0" >/sys/devices/system/cpu/cpu0/online_control
 		echo "0" >/sys/devices/system/cpu/cpu1/online_control
 		echo "0" >/sys/devices/system/cpu/cpu2/online_control
@@ -519,7 +519,7 @@ if [ "apply_cpu_hotplug_profile" == "$1" ]; then
 		exit 0
 	fi
 
-	if [ "Optimized" == "$2" ]; then
+	if [ "Optimized MPD" == "$2" ]; then
 		echo "0" >/sys/devices/system/cpu/cpu0/online_control
 		echo "0" >/sys/devices/system/cpu/cpu1/online_control
 		echo "0" >/sys/devices/system/cpu/cpu2/online_control

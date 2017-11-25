@@ -337,7 +337,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 
-	for (i = array_size; i >= 0; i--) {
+	for (i = array_size-1; i >= 0; i--) {
 		minfree = lowmem_minfree[i];
 		lowmem_print(5,"%u < %u ???????", other_file, minfree);
 		if (other_file < minfree) {
@@ -396,9 +396,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (!selected) {
                 rcu_read_unlock();
                 if (i>0) {
-			lowmem_print(4,"i: %u . lowmem_adj[i]: %u", i, lowmem_adj[i]);
+			lowmem_print(5,"i: %u . lowmem_adj[i]: %u", i, lowmem_adj[i]);
 			min_score_adj = lowmem_adj[--i];
-			lowmem_print(4,"min_score_adj decreased to: %d", min_score_adj);
+			lowmem_print(5,"min_score_adj decreased to: %d", min_score_adj);
                 }
 		else goto out;
 
