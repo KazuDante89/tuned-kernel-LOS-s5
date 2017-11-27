@@ -72,14 +72,14 @@ static struct mutex gov_lock;
 static unsigned int hispeed_freq;
 
 /* Go to hi speed when CPU load at or above this value. */
-#define DEFAULT_GO_HISPEED_LOAD 99
+#define DEFAULT_GO_HISPEED_LOAD 90
 static unsigned long go_hispeed_load = DEFAULT_GO_HISPEED_LOAD;
 
 /* Sampling down factor to be applied to min_sample_time at max freq */
 static unsigned int sampling_down_factor;
 
 /* Target load.  Lower values result in higher CPU speeds. */
-#define DEFAULT_TARGET_LOAD 90
+#define DEFAULT_TARGET_LOAD 80
 static unsigned int default_target_loads[] = {DEFAULT_TARGET_LOAD};
 static spinlock_t target_loads_lock;
 static unsigned int *target_loads = default_target_loads;
@@ -125,7 +125,7 @@ static u64 boostpulse_endtime;
 #define DEFAULT_TIMER_SLACK (4 * DEFAULT_TIMER_RATE)
 static int timer_slack_val = DEFAULT_TIMER_SLACK;
 
-static bool io_is_busy;
+static bool io_is_busy = false;
 
 #ifdef CONFIG_MODE_AUTO_CHANGE
 struct cpufreq_loadinfo {
@@ -267,8 +267,8 @@ static inline cputime64_t get_cpu_idle_time(unsigned int cpu,
 static void cpufreq_interactive_timer_resched(
 	struct cpufreq_interactive_cpuinfo *pcpu)
 {
-	unsigned long expires;
-	unsigned long flags;
+	static unsigned long expires;
+	static unsigned long flags;
 
 	spin_lock_irqsave(&pcpu->load_lock, flags);
 	pcpu->time_in_idle =
@@ -364,7 +364,7 @@ static unsigned int freq_to_targetload(unsigned int freq)
  * target load given the current load.
  */
 
-static unsigned int choose_freq(
+static inline unsigned int choose_freq(
 	struct cpufreq_interactive_cpuinfo *pcpu, unsigned int loadadjfreq)
 {
 	unsigned int freq = pcpu->policy->cur;
@@ -449,7 +449,7 @@ static unsigned int choose_freq(
 	return freq;
 }
 
-static u64 update_load(int cpu)
+static inline u64 update_load(int cpu)
 {
 	struct cpufreq_interactive_cpuinfo *pcpu = &per_cpu(cpuinfo, cpu);
 	u64 now;
@@ -618,15 +618,11 @@ static void exit_mode(void)
 
 static void cpufreq_interactive_timer(unsigned long data)
 {
-	u64 now;
-	unsigned int delta_time;
-	u64 cputime_speedadj;
-	int cpu_load;
+	static u64 now, cputime_speedadj;
+	static unsigned int delta_time, loadadjfreq, new_freq, index;
+	static int cpu_load;
 	struct cpufreq_interactive_cpuinfo *pcpu =
 		&per_cpu(cpuinfo, data);
-	unsigned int new_freq;
-	unsigned int loadadjfreq;
-	unsigned int index;
 	unsigned long flags;
 	bool boosted;
 	unsigned long mod_min_sample_time;
