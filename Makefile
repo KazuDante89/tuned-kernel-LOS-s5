@@ -357,11 +357,11 @@ CC		= $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 
-OPTS           = -fconserve-stack -ffast-math
-#		-fmodulo-sched -fmodulo-sched-allow-regmoves -ffast-math \
-#		-fgcse-after-reload -fsingle-precision-constant -ftree-partial-pre -fpredictive-commoning -fira-loop-pressure \
-#		-fpredictive-commoning -ftree-loop-distribute-patterns -ftree-vectorize -fvect-cost-model=cheap -fpeel-loops -funswitch-loops \
-#		-fgcse-sm -fgcse-las -fira-hoist-pressure -fira-loop-pressure -funroll-loops -fno-inline-functions
+OPTS           = -fconserve-stack -ffast-math -O3 \
+		-fmodulo-sched -fmodulo-sched-allow-regmoves \
+		-fgcse-after-reload -fsingle-precision-constant -ftree-partial-pre -fpredictive-commoning -fira-loop-pressure \
+		-fpredictive-commoning -ftree-loop-distribute-patterns -ftree-vectorize -fvect-cost-model=cheap -fpeel-loops -funswitch-loops \
+		-fgcse-sm -fgcse-las -fira-hoist-pressure -fira-loop-pressure -funroll-loops -fno-inline-functions
 
 #-fconserve-stack -fipa-cp-clone
 GCC6WARNINGS   = -Wno-bool-compare -Wno-misleading-indentation -Wno-format -Wno-strict-aliasing -Wno-tautological-compare -Wno-discarded-array-qualifiers

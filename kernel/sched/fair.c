@@ -3249,7 +3249,7 @@ static int move_one_task(struct lb_env *env)
 
 static unsigned long task_h_load(struct task_struct *p);
 
-static const unsigned int sched_nr_migrate_break = 16;
+static const unsigned int sched_nr_migrate_break = 32;
 
 /*
  * move_tasks tries to move up to load_move weighted load from busiest to
