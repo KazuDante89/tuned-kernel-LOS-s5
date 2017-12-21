@@ -443,10 +443,6 @@ if [ "apply_cpu_hotplug_profile" == "$1" ]; then
 	fi
 
         if [ "Tuned" == "$2" ]; then
-                echo "1" >/sys/devices/system/cpu/cpu0/online_control
-                echo "1" >/sys/devices/system/cpu/cpu1/online_control
-                echo "1" >/sys/devices/system/cpu/cpu2/online_control
-                echo "1" >/sys/devices/system/cpu/cpu3/online_control
 		echo "1" >/sys/module/tuned_plug/parameters/tuned_plug_active
 		if [ -f /system/bin/mpdecision ]; then
 			mount -o rw,remount /system
@@ -454,6 +450,8 @@ if [ "apply_cpu_hotplug_profile" == "$1" ]; then
 			killall mpdecision
 			mount -o ro,remount /system
 		fi
+		busybox find /sys/devices/system/cpu/cpu? -name online -exec sh -c "echo 1 > {}" \;
+		busybox find /sys/devices/system/cpu -name scaling_min_freq -exec sh -c "echo 300000 > {}" \;
                 exit 0
         else
 	        echo "0" >/sys/module/tuned_plug/parameters/tuned_plug_active

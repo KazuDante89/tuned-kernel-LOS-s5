@@ -28,26 +28,33 @@ static struct workqueue_struct *tunedplug_wq;
 static unsigned int tuned_plug_active = 1;
 module_param(tuned_plug_active, uint, 0644);
 
-static unsigned int sampling_time = 0;
-static unsigned int lowthresh = 4000;
+static unsigned int sampling_time = 13;
+//static unsigned int lowthresh = 2000;
 
 static bool displayon = true;
+static unsigned int down[NR_CPUS-1];
 
 static void inline down_one(void){
 	unsigned int i;
 	for (i = NR_CPUS; i > 0; --i) {
 		if (cpu_online(i)) {
-			cpu_down(i);
-			pr_info("tunedplug: DOWN cpu %d", i);
-			msleep_interruptible(1000);
-			break;
+			if (down[i] > 8) {
+				cpu_down(i);
+				down[i]=0;
+				pr_info("tunedplug: DOWN cpu %d", i);
+				msleep_interruptible(500);
+			}
+			else down[i]++;
+			return;
 		}
 	}
 }
 
 static void __cpuinit tuned_plug_work_fn(struct work_struct *work)
 {
-	unsigned int nr_run_stat, nr_cpus, i;
+	unsigned int nr_cpus, i;
+	struct cpufreq_policy policy;
+//	unsigned int nr_run_stat;
 
         queue_delayed_work_on(0, tunedplug_wq, &tuned_plug_work, sampling_time);
 
@@ -55,12 +62,41 @@ static void __cpuinit tuned_plug_work_fn(struct work_struct *work)
                 return;
 
 	if (!displayon) {
-		if (lowthresh < 10000) lowthresh += 5;
+//		if (lowthresh < 10000) lowthresh += 5;
 		if (sampling_time < 200) sampling_time += 1;
 	}
 
+        nr_cpus = num_online_cpus();
+
+	/* if any cpu is on its limit, turn on the next one and quit.
+	   This is a shortcut. Returning here will prevent unecessary computing
+	*/
+	if (nr_cpus < NR_CPUS) {
+		for_each_online_cpu(i) {
+			if (cpufreq_get_policy(&policy, i) != 0)
+				continue;
+			if (i < NR_CPUS-1 && (policy.cur >= policy.max)) {
+				unsigned int c = i+1;
+				if (!cpu_online(c)) {
+					cpu_up(c);
+					down[c]=0;
+					pr_info("tunedplug: UP cpu %d", c);
+				}
+			}
+		}
+	}
+
+	if (nr_cpus > 1) {
+                for_each_online_cpu(i) {
+                        if (!i || (cpufreq_get_policy(&policy, i) != 0))
+                                continue;
+                        if (policy.cur <= policy.min)
+				down_one();
+                }
+	}
+
+#if 0
 	nr_run_stat = avg_nr_running();
-	nr_cpus = num_online_cpus();
 
 
 	pr_info("tunedplug: run_stat: %d . lowthresh: %d . sampling: %d", nr_run_stat, lowthresh, sampling_time);
@@ -71,31 +107,34 @@ static void __cpuinit tuned_plug_work_fn(struct work_struct *work)
 			return;
 		}
 	}
-	else if (nr_cpus < NR_CPUS) {
+	else if ((nr_cpus < NR_CPUS) && (nr_run_stat > lowthresh*2)) {
 		for (i = 1; i < NR_CPUS; i++) {
 			if (!cpu_online(i)) {
 				cpu_up(i);
 				pr_info("tunedplug: UP cpu %d", i);
-				if (nr_run_stat < lowthresh*2)
+				if (nr_run_stat < lowthresh*3) {
+					msleep_interruptible(500);
 					return;
+				}
 			}
 		}
 	}
+#endif
 }
 static int lcd_notifier_callback(struct notifier_block *this,
 				unsigned long event, void *data)
 {
         switch (event)
         {
-                case LCD_EVENT_OFF_START:
+                case LCD_EVENT_OFF_END:
 			pr_info("tunedplug: screen off!");
 			displayon = false;
                         break;
 
-                case LCD_EVENT_ON_END:
+                case LCD_EVENT_ON_START:
 			pr_info("tunedplug: screen on again!");
 			displayon = true;
-        	        lowthresh = 4000;
+//        	        lowthresh = 2000;
 	                sampling_time = DEF_SAMPLING;
                         break;
 
@@ -116,7 +155,7 @@ static void initnotifier(void)
 int __init tuned_plug_init(void)
 {
 
-	tunedplug_wq = alloc_workqueue("tunedplug", WQ_HIGHPRI | WQ_UNBOUND, 1);
+	tunedplug_wq = alloc_workqueue("tunedplug", WQ_HIGHPRI, 0);
 
 	INIT_DELAYED_WORK(&tuned_plug_work, tuned_plug_work_fn);
 

@@ -326,6 +326,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int tasksize, i, minfree, selected_oom_score, other_file;
 	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int array_size = ARRAY_SIZE(lowmem_adj);
+	static unsigned int last_lmk, lmk_count=0;
 
 	if (mutex_lock_interruptible(&scan_mutex) < 0)
 		return 0;
@@ -338,7 +339,12 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 
-	for (i = array_size-1; i >= 0; i--) {
+	if (lmk_count > 3 && jiffies-last_lmk < 10000 && array_size > 4) {
+		min_score_adj = lowmem_adj[array_size-4];
+		lmk_count = 0;
+		lowmem_print(1,"Too many apps installed? Killing some background apps!");
+	}
+	else for (i = array_size-1; i >= 0; i--) {
 		minfree = lowmem_minfree[i];
 		lowmem_print(5,"%u < %u ???????", other_file, minfree);
 		if (other_file < minfree) {
@@ -346,8 +352,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			break;
 		}
 	}
-
-	lowmem_print(4,"min_score_adj: %d", min_score_adj);
 
 	if (i < 0) {
 		lowmem_print(3, "i < 0. min_score_adj = %d. We still have %u pages in cache", min_score_adj, other_file);
@@ -371,14 +375,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 
 		if (tsk->flags & PF_KTHREAD)
 			continue;
-#if 0
-		/* if task no longer has any memory ignore it */
-		if (test_task_flag(tsk, TIF_MM_RELEASED))
-			continue;
 
-		if (test_task_flag(tsk, TIF_MEMDIE))
-			continue;
-#endif
 		oom_score = oom_badness(tsk, NULL, NULL, totalram_pages + total_swap_pages);
 
 		if (!oom_score || oom_score < min_score_adj)
@@ -397,11 +394,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (!selected) {
                 rcu_read_unlock();
                 if (i>0) {
-			lowmem_print(5,"i: %u . lowmem_adj[i]: %u", i, lowmem_adj[i]);
 			min_score_adj = lowmem_adj[--i];
-			lowmem_print(5,"min_score_adj decreased to: %d", min_score_adj);
+			lowmem_print(5, "min_score_adj decreased to: %d", min_score_adj);
                 }
-		else goto out;
+		else { lmk_count=0; goto out; }
 
 		lowmem_print(4, "Nothing to kill. Advancing to %d", min_score_adj);
 		goto restart;
@@ -457,6 +453,8 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		rcu_read_unlock();
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);
+		last_lmk = jiffies;
+		lmk_count++;
 	}
 
 	out:

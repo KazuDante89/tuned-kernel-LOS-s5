@@ -357,13 +357,13 @@ CC		= $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 
-OPTS           = -fconserve-stack -ffast-math -O3 \
+OPTS           = -ffast-math -O3 \
 		-fmodulo-sched -fmodulo-sched-allow-regmoves \
-		-fgcse-after-reload -fsingle-precision-constant -ftree-partial-pre -fpredictive-commoning -fira-loop-pressure \
-		-fpredictive-commoning -ftree-loop-distribute-patterns -ftree-vectorize -fvect-cost-model=cheap -fpeel-loops -funswitch-loops \
-		-fgcse-sm -fgcse-las -fira-hoist-pressure -fira-loop-pressure -funroll-loops -fno-inline-functions
+		-fsingle-precision-constant -ftree-partial-pre -fpredictive-commoning \
+		-fpredictive-commoning -ftree-vectorize -fvect-cost-model=cheap \
+		-fgcse-sm -fgcse-las -fira-hoist-pressure -fno-ira-loop-pressure -fno-inline-functions
 
-#-fconserve-stack -fipa-cp-clone
+#-fconserve-stack
 GCC6WARNINGS   = -Wno-bool-compare -Wno-misleading-indentation -Wno-format -Wno-strict-aliasing -Wno-tautological-compare -Wno-discarded-array-qualifiers
 GCC7WARNINGS   = $(GCC6WARNINGS) -Wno-int-in-bool-context -Wno-memset-elt-size -Wno-parentheses -Wno-bool-operation -Wno-duplicate-decl-specifier -Wno-stringop-overflow -Wno-format-overflow -Wno-switch-unreachable -Wno-pointer-compare -fsplit-loops
 GCC8WARNINGS   = $(GCC7WARNINGS) -Wno-multistatement-macros -Wno-sizeof-pointer-div -Wno-logical-not-parentheses -Wno-packed-not-aligned -Wno-shift-overflow -Wno-switch-bool
